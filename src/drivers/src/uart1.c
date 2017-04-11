@@ -1,6 +1,6 @@
 /**
- *    ||          ____  _ __                           
- * +------+      / __ )(_) /_______________ _____  ___ 
+ *    ||          ____  _ __
+ * +------+      / __ )(_) /_______________ _____  ___
  * | 0xBC |     / __  / / __/ ___/ ___/ __ `/_  / / _ \
  * +------+    / /_/ / / /_/ /__/ /  / /_/ / / /_/  __/
  *  ||  ||    /_____/_/\__/\___/_/   \__,_/ /___/\___/
@@ -91,7 +91,7 @@ void uart1Init(const uint32_t baudrate)
 
   //Enable UART
   USART_Cmd(UART1_TYPE, ENABLE);
-  
+
   USART_ITConfig(UART1_TYPE, USART_IT_RXNE, ENABLE);
 
   isInit = true;
@@ -130,7 +130,7 @@ void uart1SendData(uint32_t size, uint8_t* data)
 int uart1Putchar(int ch)
 {
     uart1SendData(1, (uint8_t *)&ch);
-    
+
     return (unsigned char)ch;
 }
 
@@ -149,4 +149,9 @@ void __attribute__((used)) USART3_IRQHandler(void)
     rxData = USART_ReceiveData(UART1_TYPE) & 0x00FF;
     xQueueSendFromISR(uart1queue, &rxData, &xHigherPriorityTaskWoken);
   }
+}
+
+void uart1FlushInput(void)
+{
+  xQueueReset(uart1queue);
 }

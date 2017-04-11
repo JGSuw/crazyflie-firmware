@@ -98,4 +98,9 @@ void uart1Getchar(char * ch);
  */
 #define uart1Printf(FMT, ...) eprintf(uart1Putchar, FMT, ## __VA_ARGS__)
 
+/**
+ * Flushes the input queue of uart1 of unwanted data
+ */
+void uart1FlushInput(void);
+
 #endif /* UART1_H_ */
