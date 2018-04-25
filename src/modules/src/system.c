@@ -60,6 +60,7 @@
 #include "buzzer.h"
 #include "sound.h"
 #include "sysload.h"
+#include "eag.h"
 
 #ifdef PLATFORM_CF1
 #include "uart_cf1.h"
@@ -170,6 +171,7 @@ void systemTask(void *arg)
   systemInit();
   commInit();
   commanderInit();
+  eagInit();
 
   StateEstimatorType estimator = anyEstimator;
 #ifdef PLATFORM_CF2
