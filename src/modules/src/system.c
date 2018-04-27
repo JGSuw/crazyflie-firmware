@@ -42,6 +42,7 @@
 
 #include "config.h"
 #include "system.h"
+#include "platform.h"
 #include "configblock.h"
 #include "worker.h"
 #include "freeRTOSdebug.h"
@@ -60,6 +61,7 @@
 #include "buzzer.h"
 #include "sound.h"
 #include "sysload.h"
+<<<<<<< HEAD
 #include "eag.h"
 
 #ifdef PLATFORM_CF1
@@ -67,10 +69,9 @@
 #endif
 
 #ifdef PLATFORM_CF2
+=======
+>>>>>>> 802c74a4ebda8385325412b36bb3cb45d6c3b5cd
 #include "deck.h"
-#endif
-
-
 #include "extrx.h"
 
 /* Private variable */
@@ -102,10 +103,8 @@ void systemInit(void)
   canStartMutex = xSemaphoreCreateMutex();
   xSemaphoreTake(canStartMutex, portMAX_DELAY);
 
-#ifdef PLATFORM_CF2
   usblinkInit();
   sysLoadInit();
-#endif
 
   /* Initialized hear and early so that DEBUG_PRINT (buffered) can be used early */
   crtpInit();
@@ -115,7 +114,7 @@ void systemInit(void)
   DEBUG_PRINT(P_NAME " is up and running!\n");
   DEBUG_PRINT("Build %s:%s (%s) %s\n", V_SLOCAL_REVISION,
               V_SREVISION, V_STAG, (V_MODIFIED)?"MODIFIED":"CLEAN");
-  DEBUG_PRINT("I am 0x%X%X%X and I have %dKB of flash!\n",
+  DEBUG_PRINT("I am 0x%08X%08X%08X and I have %dKB of flash!\n",
               *((int*)(MCU_ID_ADDRESS+8)), *((int*)(MCU_ID_ADDRESS+4)),
               *((int*)(MCU_ID_ADDRESS+0)), *((short*)(MCU_FLASH_SIZE_ADDRESS)));
 
@@ -133,9 +132,6 @@ bool systemTest()
 {
   bool pass=isInit;
 
-#ifdef PLATFORM_CF1
-  pass &= adcTest();
-#endif
   pass &= ledseqTest();
   pass &= pmTest();
   pass &= workerTest();
@@ -156,10 +152,6 @@ void systemTask(void *arg)
   queueMonitorInit();
 #endif
 
-#ifdef PLATFORM_CF1
-  uartInit();
-#endif
-
 #ifdef ENABLE_UART1
   uart1Init();
 #endif
@@ -174,11 +166,13 @@ void systemTask(void *arg)
   eagInit();
 
   StateEstimatorType estimator = anyEstimator;
-#ifdef PLATFORM_CF2
   deckInit();
   estimator = deckGetRequiredEstimator();
-#endif
   stabilizerInit(estimator);
+  if (deckGetRequiredLowInterferenceRadioMode())
+  {
+    platformSetLowInterferenceRadioMode();
+  }
   soundInit();
   memInit();
 
@@ -192,9 +186,7 @@ void systemTask(void *arg)
   pass &= commTest();
   pass &= commanderTest();
   pass &= stabilizerTest();
-#ifdef PLATFORM_CF2
   pass &= deckTest();
-#endif
   pass &= soundTest();
   pass &= memTest();
   pass &= watchdogNormalStartTest();

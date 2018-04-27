@@ -35,19 +35,12 @@ SENSORS 					 ?= cf2
 ######### Test activation ##########
 FATFS_DISKIO_TESTS  ?= 0	# Set to 1 to enable FatFS diskio function tests. Erases card.
 
-ifeq ($(PLATFORM), CF1)
-OPENOCD_TARGET    ?= target/stm32f1x_stlink.cfg
-USE_FPU            = 0
-endif
 ifeq ($(PLATFORM), CF2)
 OPENOCD_TARGET    ?= target/stm32f4x_stlink.cfg
 USE_FPU           ?= 1
 endif
 
 
-ifeq ($(PLATFORM), CF1)
-REV               ?= F
-endif
 ifeq ($(PLATFORM), CF2)
 # Now needed for SYSLINK
 CFLAGS += -DUSE_RADIOLINK_CRTP     # Set CRTP link to radio
@@ -66,10 +59,6 @@ else
 PORT = $(FREERTOS)/portable/GCC/ARM_CM3
 endif
 
-ifeq ($(PLATFORM), CF1)
-LINKER_DIR = tools/make/F103/linker
-ST_OBJ_DIR  = tools/make/F103
-endif
 ifeq ($(PLATFORM), CF2)
 LINKER_DIR = tools/make/F405/linker
 ST_OBJ_DIR  = tools/make/F405
@@ -79,10 +68,6 @@ LIB = src/lib
 
 ################ Build configuration ##################
 # St Lib
-VPATH_CF1 += $(LIB)/CMSIS/Core/CM3
-VPATH_CF1 += $(LIB)/CMSIS/Core/CM3/startup/gcc
-CRT0_CF1 = startup_stm32f10x_md.o system_stm32f10x.o
-
 VPATH_CF2 += $(LIB)/CMSIS/STM32F4xx/Source/
 VPATH_CF2 += $(LIB)/STM32_USB_Device_Library/Core/src
 VPATH_CF2 += $(LIB)/STM32_USB_OTG_Driver/src
@@ -99,6 +84,9 @@ ST_OBJ_CF2 += usbd_ioreq.o usbd_req.o usbd_core.o
 
 # libdw dw1000 driver
 VPATH_CF2 += vendor/libdw1000/src
+
+# vl53l1 driver
+VPATH_CF2 += $(LIB)/vl53l1/core/src
 
 # FreeRTOS
 VPATH += $(PORT)
@@ -119,12 +107,8 @@ endif
 
 # Crazyflie sources
 VPATH += src/init src/hal/src src/modules/src src/utils/src src/drivers/bosch/src src/drivers/src
-VPATH_CF1 += src/platform/cf1
 VPATH_CF2 += src/platform/cf2
 
-ifeq ($(PLATFORM), CF1)
-VPATH +=$(VPATH_CF1)
-endif
 ifeq ($(PLATFORM), CF2)
 VPATH +=$(VPATH_CF2)
 endif
@@ -134,35 +118,35 @@ endif
 
 # Init
 PROJ_OBJ += main.o
-PROJ_OBJ_CF1 += platform_cf1.o
 PROJ_OBJ_CF2 += platform_cf2.o
 
 # Drivers
 PROJ_OBJ += exti.o nvic.o motors.o
-PROJ_OBJ_CF1 += led_f103.o i2cdev_f103.o i2croutines.o adc_f103.o mpu6050.o
-PROJ_OBJ_CF1 += hmc5883l.o ms5611.o nrf24l01.o eeprom.o watchdog.o
-PROJ_OBJ_CF1 += eskylink.o
 PROJ_OBJ_CF2 += led_f405.o mpu6500.o i2cdev_f405.o ws2812_cf2.o lps25h.o i2c_drv.o
 PROJ_OBJ_CF2 += ak8963.o eeprom.o maxsonar.o piezo.o
 PROJ_OBJ_CF2 += uart_syslink.o swd.o uart1.o uart2.o watchdog.o
 PROJ_OBJ_CF2 += cppm.o
 PROJ_OBJ_CF2 += bmi055_accel.o bmi055_gyro.o bmi160.o bmp280.o bstdr_comm_support.o bmm150.o
+PROJ_OBJ_CF2 += pca9685.o vl53l0x.o pca95x4.o vl53l1x.o
 # USB Files
 PROJ_OBJ_CF2 += usb_bsp.o usblink.o usbd_desc.o usb.o
 
 # Hal
 PROJ_OBJ += crtp.o ledseq.o freeRTOSdebug.o buzzer.o
-PROJ_OBJ_CF1 += imu_cf1.o pm_f103.o nrf24link.o ow_none.o uart_cf1.o
 PROJ_OBJ_CF2 +=  pm_f405.o syslink.o radiolink.o ow_syslink.o proximity.o usec_time.o
 
 PROJ_OBJ_CF2 +=  sensors_$(SENSORS).o
 # libdw
 PROJ_OBJ_CF2 += libdw1000.o libdw1000Spi.o
 
+# vl53l1 lib
+PROJ_OBJ_CF2 += vl53l1_api_core.o vl53l1_api.o vl53l1_core.o vl53l1_silicon_core.o vl53l1_api_strings.o
+PROJ_OBJ_CF2 += vl53l1_api_calibration.o vl53l1_api_debug.o vl53l1_api_preset_modes.o vl53l1_error_strings.o
+PROJ_OBJ_CF2 += vl53l1_register_funcs.o vl53l1_wait.o vl53l1_core_support.o
+
 # Modules
 PROJ_OBJ += system.o comm.o console.o pid.o crtpservice.o param.o
 PROJ_OBJ += log.o worker.o trigger.o sitaw.o queuemonitor.o msp.o
-PROJ_OBJ_CF1 += sound_cf1.o sensors_cf1.o mem_cf1.o
 PROJ_OBJ_CF2 += platformservice.o sound_cf2.o extrx.o sysload.o mem_cf2.o
 
 # Stabilizer modules
@@ -175,6 +159,8 @@ PROJ_OBJ += controller_$(CONTROLLER).o
 PROJ_OBJ += power_distribution_$(POWER_DISTRIBUTION).o
 PROJ_OBJ_CF2 += estimator_kalman.o
 
+# High-Level Commander
+PROJ_OBJ += crtp_commander_high_level.o planner.o pptraj.o
 
 # Deck Core
 PROJ_OBJ_CF2 += deck.o deck_info.o deck_drivers.o deck_test.o
@@ -193,18 +179,21 @@ PROJ_OBJ_CF2 += buzzdeck.o
 PROJ_OBJ_CF2 += gtgps.o
 PROJ_OBJ_CF2 += cppmdeck.o
 PROJ_OBJ_CF2 += usddeck.o
-PROJ_OBJ_CF2 += vl53l0x.o
+PROJ_OBJ_CF2 += zranger.o
 PROJ_OBJ_CF2 += locodeck.o
-ifeq ($(LPS_TDMA_ENABLE), 1)
-PROJ_OBJ_CF2 += lpsTwrTdmaTag.o
-else
 PROJ_OBJ_CF2 += lpsTwrTag.o
-endif
+PROJ_OBJ_CF2 += lpsTdoaTag.o
+PROJ_OBJ_CF2 += outlierFilter.o
 PROJ_OBJ_CF2 += flowdeck.o
+PROJ_OBJ_CF2 += oa.o
+PROJ_OBJ_CF2 += multiranger.o
 
 ifeq ($(LPS_TDOA_ENABLE), 1)
-PROJ_OBJ_CF2 += lpsTdoaTag.o
 CFLAGS += -DLPS_TDOA_ENABLE
+endif
+
+ifeq ($(LPS_TDMA_ENABLE), 1)
+CFLAGS += -DLPS_TDMA_ENABLE
 endif
 
 #Deck tests
@@ -215,7 +204,6 @@ PROJ_OBJ_CF2 += exptest.o
 # Utilities
 PROJ_OBJ += filter.o cpuid.o cfassert.o  eprintf.o crc.o num.o debug.o
 PROJ_OBJ += version.o FreeRTOS-openocd.o
-PROJ_OBJ_CF1 += configblockflash.o
 PROJ_OBJ_CF2 += configblockeeprom.o crc_bosch.o
 PROJ_OBJ_CF2 += sleepus.o
 
@@ -223,9 +211,6 @@ PROJ_OBJ_CF2 += sleepus.o
 PROJ_OBJ_CF2 += libarm_math.a
 
 OBJ = $(FREERTOS_OBJ) $(PORT_OBJ) $(ST_OBJ) $(PROJ_OBJ)
-ifeq ($(PLATFORM), CF1)
-OBJ += $(CRT0_CF1) $(ST_OBJ_CF1) $(PROJ_OBJ_CF1)
-endif
 ifeq ($(PLATFORM), CF2)
 OBJ += $(CRT0_CF2) $(ST_OBJ_CF2) $(FATFS_OBJ) $(PROJ_OBJ_CF2)
 endif
@@ -247,9 +232,6 @@ INCLUDES += -Isrc/config -Isrc/hal/interface -Isrc/modules/interface
 INCLUDES += -Isrc/utils/interface -Isrc/drivers/interface -Isrc/platform
 INCLUDES += -Ivendor/CMSIS/CMSIS/Include -Isrc/drivers/bosch/interface
 
-INCLUDES_CF1 += -I$(LIB)/STM32F10x_StdPeriph_Driver/inc
-INCLUDES_CF1 += -I$(LIB)/CMSIS/Core/CM3
-
 INCLUDES_CF2 += -I$(LIB)/STM32F4xx_StdPeriph_Driver/inc
 INCLUDES_CF2 += -I$(LIB)/CMSIS/STM32F4xx/Include
 INCLUDES_CF2 += -I$(LIB)/STM32_USB_Device_Library/Core/inc
@@ -257,22 +239,20 @@ INCLUDES_CF2 += -I$(LIB)/STM32_USB_OTG_Driver/inc
 INCLUDES_CF2 += -Isrc/deck/interface -Isrc/deck/drivers/interface
 INCLUDES_CF2 += -Ivendor/libdw1000/inc
 INCLUDES_CF2 += -I$(LIB)/FatFS
+INCLUDES_CF2 += -I$(LIB)/vl53l1
+INCLUDES_CF2 += -I$(LIB)/vl53l1/core/inc
 
 ifeq ($(USE_FPU), 1)
 	PROCESSOR = -mcpu=cortex-m4 -mthumb -mfloat-abi=hard -mfpu=fpv4-sp-d16
 	CFLAGS += -fno-math-errno -DARM_MATH_CM4 -D__FPU_PRESENT=1 -D__TARGET_FPU_VFP
 else
-	ifeq ($(PLATFORM), CF1)
-		PROCESSOR = -mcpu=cortex-m3 -mthumb
-	endif
 	ifeq ($(PLATFORM), CF2)
 		PROCESSOR = -mcpu=cortex-m4 -mthumb
 	endif
 endif
 
 #Flags required by the ST library
-STFLAGS_CF1 = -DSTM32F10X_MD -DHSE_VALUE=16000000 -include stm32f10x_conf.h -DPLATFORM_CF1
-STFLAGS_CF2 = -DSTM32F4XX -DSTM32F40_41xxx -DHSE_VALUE=8000000 -DUSE_STDPERIPH_DRIVER -DPLATFORM_CF2
+STFLAGS_CF2 = -DSTM32F4XX -DSTM32F40_41xxx -DHSE_VALUE=8000000 -DUSE_STDPERIPH_DRIVER
 
 ifeq ($(DEBUG), 1)
   CFLAGS += -O0 -g3 -DDEBUG
@@ -292,9 +272,6 @@ endif
 CFLAGS += -DBOARD_REV_$(REV) -DESTIMATOR_NAME=$(ESTIMATOR)Estimator -DCONTROLLER_TYPE_$(CONTROLLER) -DPOWER_DISTRIBUTION_TYPE_$(POWER_DISTRIBUTION)
 
 CFLAGS += $(PROCESSOR) $(INCLUDES) $(STFLAGS)
-ifeq ($(PLATFORM), CF1)
-CFLAGS += $(INCLUDES_CF1) $(STFLAGS_CF1)
-endif
 ifeq ($(PLATFORM), CF2)
 CFLAGS += $(INCLUDES_CF2) $(STFLAGS_CF2)
 endif
@@ -325,11 +302,7 @@ ifeq ($(LTO), 1)
 endif
 
 #Program name
-ifeq ($(PLATFORM), CF1)
-PROG = cf1
-else
 PROG = cf2
-endif
 #Where to compile the .o
 BIN = bin
 VPATH += $(BIN)
@@ -361,9 +334,6 @@ ifeq ($(SHELL),/bin/sh)
 endif
 
 print_version: compile
-ifeq ($(PLATFORM), CF1)
-	@echo "Crazyflie Nano (1.0) build!"
-endif
 ifeq ($(PLATFORM), CF2)
 	@echo "Crazyflie 2.0 build!"
 endif
@@ -389,7 +359,13 @@ endif
 #Flash the stm.
 flash:
 	$(OPENOCD) -d2 -f $(OPENOCD_INTERFACE) $(OPENOCD_CMDS) -f $(OPENOCD_TARGET) -c init -c targets -c "reset halt" \
-                 -c "flash write_image erase $(PROG).elf" -c "verify_image $(PROG).elf" -c "reset run" -c shutdown
+                 -c "flash write_image erase $(PROG).bin $(LOAD_ADDRESS) bin" \
+                 -c "verify_image $(PROG).bin $(LOAD_ADDRESS) bin" -c "reset run" -c shutdown
+
+#verify only
+flash_verify:
+	$(OPENOCD) -d2 -f $(OPENOCD_INTERFACE) $(OPENOCD_CMDS) -f $(OPENOCD_TARGET) -c init -c targets -c "reset halt" \
+                 -c "verify_image $(PROG).bin $(LOAD_ADDRESS) bin" -c "reset run" -c shutdown
 
 flash_dfu:
 	$(DFU_UTIL) -a 0 -D $(PROG).dfu

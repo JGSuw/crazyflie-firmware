@@ -29,6 +29,7 @@
 #include <math.h>
 
 #include "lpsTwrTag.h"
+#include "lpsTdma.h"
 
 #include "FreeRTOS.h"
 #include "task.h"
@@ -49,11 +50,11 @@ static struct {
 } rangingStats[LOCODECK_NR_OF_ANCHORS];
 
 // Rangin statistics
-static uint32_t rangingPerSec[LOCODECK_NR_OF_ANCHORS];
-static float rangingSuccessRate[LOCODECK_NR_OF_ANCHORS];
+static uint8_t rangingPerSec[LOCODECK_NR_OF_ANCHORS];
+static uint8_t rangingSuccessRate[LOCODECK_NR_OF_ANCHORS];
 // Used to calculate above values
-static uint32_t succededRanging[LOCODECK_NR_OF_ANCHORS];
-static uint32_t failedRanging[LOCODECK_NR_OF_ANCHORS];
+static uint8_t succededRanging[LOCODECK_NR_OF_ANCHORS];
+static uint8_t failedRanging[LOCODECK_NR_OF_ANCHORS];
 
 // Timestamps for ranging
 static dwTime_t poll_tx;
@@ -73,6 +74,12 @@ static bool lpp_transaction = false;
 static lpsLppShortPacket_t lppShortPacket;
 
 static lpsAlgoOptions_t* options;
+
+// TDMA handling
+static bool tdmaSynchronized;
+static dwTime_t frameStart;
+
+static bool rangingOk;
 
 static void txcallback(dwDevice_t *dev)
 {
@@ -186,6 +193,8 @@ static uint32_t rxcallback(dwDevice_t *dev) {
 
       rangingStats[current_anchor].history[rangingStats[current_anchor].ptr] = options->distance[current_anchor];
 
+      rangingOk = true;
+
       if ((options->combinedAnchorPositionOk || options->anchorPosition[current_anchor].timestamp) &&
           (diff < (OUTLIER_TH*stddev))) {
         distanceMeasurement_t dist;
@@ -197,6 +206,14 @@ static uint32_t rxcallback(dwDevice_t *dev) {
         estimatorKalmanEnqueueDistance(&dist);
       }
 
+      if (options->useTdma && current_anchor == 0) {
+        // Final packet is sent by us and received by the anchor
+        // We use it as synchonisation time for TDMA
+        dwTime_t offset = { .full =final_tx.full - final_rx.full };
+        frameStart.full = TDMA_LAST_FRAME(final_rx.full) + offset.full;
+        tdmaSynchronized = true;
+      }
+
       ranging_complete = true;
 
       return 0;
@@ -206,10 +223,39 @@ static uint32_t rxcallback(dwDevice_t *dev) {
   return MAX_TIMEOUT;
 }
 
-void initiateRanging(dwDevice_t *dev)
+/* Adjust time for schedule transfer by DW1000 radio. Set 9 LSB to 0 */
+static uint32_t adjustTxRxTime(dwTime_t *time)
 {
-  current_anchor ++;
-  if (current_anchor >= LOCODECK_NR_OF_ANCHORS) {
+  uint32_t added = (1<<9) - (time->low32 & ((1<<9)-1));
+  time->low32 = (time->low32 & ~((1<<9)-1)) + (1<<9);
+  return added;
+}
+
+/* Calculate the transmit time for a given timeslot in the current frame */
+static dwTime_t transmitTimeForSlot(int slot)
+{
+  dwTime_t transmitTime = { .full = 0 };
+  // Calculate start of the slot
+  transmitTime.full = frameStart.full + slot*TDMA_SLOT_LEN;
+
+  // DW1000 can only schedule time with 9 LSB at 0, adjust for it
+  adjustTxRxTime(&transmitTime);
+  return transmitTime;
+}
+
+static void initiateRanging(dwDevice_t *dev)
+{
+  if (!options->useTdma || tdmaSynchronized) {
+    if (options->useTdma) {
+      // go to next TDMA frame
+      frameStart.full += TDMA_FRAME_LEN;
+    }
+
+    current_anchor ++;
+    if (current_anchor >= LOCODECK_NR_OF_ANCHORS) {
+      current_anchor = 0;
+    }
+  } else {
     current_anchor = 0;
   }
 
@@ -225,11 +271,16 @@ void initiateRanging(dwDevice_t *dev)
   dwSetDefaults(dev);
   dwSetData(dev, (uint8_t*)&txPacket, MAC802154_HEADER_LENGTH+2);
 
+  if (options->useTdma && tdmaSynchronized) {
+    dwTime_t txTime = transmitTimeForSlot(options->tdmaSlot);
+    dwSetTxRxTime(dev, txTime);
+  }
+
   dwWaitForResponse(dev, true);
   dwStartTransmit(dev);
 }
 
-void sendLppShort(dwDevice_t *dev, lpsLppShortPacket_t *packet)
+static void sendLppShort(dwDevice_t *dev, lpsLppShortPacket_t *packet)
 {
   dwIdle(dev);
 
@@ -346,17 +397,41 @@ static void twrTagInit(dwDevice_t *dev, lpsAlgoOptions_t* algoOptions)
   options->rangingState = 0;
   ranging_complete = false;
 
+  tdmaSynchronized = false;
+
   memset(options->distance, 0, sizeof(options->distance));
   memset(options->pressures, 0, sizeof(options->pressures));
   memset(options->failedRanging, 0, sizeof(options->failedRanging));
+
+  dwSetReceiveWaitTimeout(dev, TWR_RECEIVE_TIMEOUT);
+
+  dwCommitConfiguration(dev);
+
+  rangingOk = false;
+}
+
+static bool isRangingOk()
+{
+  return rangingOk;
 }
 
 uwbAlgorithm_t uwbTwrTagAlgorithm = {
   .init = twrTagInit,
   .onEvent = twrTagOnEvent,
+  .isRangingOk = isRangingOk,
 };
 
 LOG_GROUP_START(twr)
-LOG_ADD(LOG_FLOAT, rangingSuccessRate0, &rangingSuccessRate[0])
-LOG_ADD(LOG_UINT32, rangingPerSec0, &rangingPerSec[0])
+LOG_ADD(LOG_UINT8, rangingSuccessRate0, &rangingSuccessRate[0])
+LOG_ADD(LOG_UINT8, rangingPerSec0, &rangingPerSec[0])
+LOG_ADD(LOG_UINT8, rangingSuccessRate1, &rangingSuccessRate[1])
+LOG_ADD(LOG_UINT8, rangingPerSec1, &rangingPerSec[1])
+LOG_ADD(LOG_UINT8, rangingSuccessRate2, &rangingSuccessRate[2])
+LOG_ADD(LOG_UINT8, rangingPerSec2, &rangingPerSec[2])
+LOG_ADD(LOG_UINT8, rangingSuccessRate3, &rangingSuccessRate[3])
+LOG_ADD(LOG_UINT8, rangingPerSec3, &rangingPerSec[3])
+LOG_ADD(LOG_UINT8, rangingSuccessRate4, &rangingSuccessRate[4])
+LOG_ADD(LOG_UINT8, rangingPerSec4, &rangingPerSec[4])
+LOG_ADD(LOG_UINT8, rangingSuccessRate5, &rangingSuccessRate[5])
+LOG_ADD(LOG_UINT8, rangingPerSec5, &rangingPerSec[5])
 LOG_GROUP_STOP(twr)

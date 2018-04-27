@@ -55,10 +55,6 @@
  *
  */
 
-#ifdef PLATFORM_CF1
-#error ESTIMATOR = kalman is only compatible with the Crazyflie 2.0 // since it requires an FPU
-#endif
-
 #include "estimator_kalman.h"
 
 #include "stm32f4xx.h"
@@ -200,7 +196,7 @@ static inline bool stateEstimatorHasTOFPacket(tofMeasurement_t *tof) {
 #define MIN_COVARIANCE (1e-6f)
 
 // The bounds on states, these shouldn't be hit...
-#define MAX_POSITION (10) //meters
+#define MAX_POSITION (100) //meters
 #define MAX_VELOCITY (10) //meters per second
 
 // Initial variances, uncertain of position, but know we're stationary and roughly flat
@@ -218,6 +214,10 @@ static float procNoiseAtt = 0;
 static float measNoiseBaro = 2.0f; // meters
 static float measNoiseGyro_rollpitch = 0.1f; // radians per second
 static float measNoiseGyro_yaw = 0.1f; // radians per second
+
+static float initialX = 0.5;
+static float initialY = 0.5;
+static float initialZ = 0.0;
 
 // We track a TDOA skew as part of the Kalman filter
 static const float stdDevInitialSkew = 0.1;
@@ -1010,8 +1010,8 @@ static void stateEstimatorUpdateWithFlow(flowMeasurement_t *flow, sensorData_t *
   // ~~~ Camera constants ~~~
   // The angle of aperture is guessed from the raw data register and thankfully look to be symmetric
   float Npix = 30.0;                      // [pixels] (same in x and y)
-  float thetapix = DEG_TO_RAD * 4.0f;    // [rad]    (same in x and y)
-
+  //float thetapix = DEG_TO_RAD * 4.0f;     // [rad]    (same in x and y)
+  float thetapix = DEG_TO_RAD * 4.2f;
   //~~~ Body rates ~~~
   // TODO check if this is feasible or if some filtering has to be done
   omegax_b = sensors->gyro.x * DEG_TO_RAD;
@@ -1025,8 +1025,11 @@ static void stateEstimatorUpdateWithFlow(flowMeasurement_t *flow, sensorData_t *
   //
   // where \hat{} denotes a basis vector, \dot{} denotes a derivative and
   // _G and _B refer to the global/body coordinate systems.
-  // dx_g = R[0][0] * S[STATE_PX] + R[1][0] * S[STATE_PY] + R[2][0] * S[STATE_PZ];
-  // dy_g = R[0][1] * S[STATE_PX] + R[1][1] * S[STATE_PY] + R[2][1] * S[STATE_PZ];
+
+  // Modification 1
+  //dx_g = R[0][0] * S[STATE_PX] + R[0][1] * S[STATE_PY] + R[0][2] * S[STATE_PZ];
+  //dy_g = R[1][0] * S[STATE_PX] + R[1][1] * S[STATE_PY] + R[1][2] * S[STATE_PZ];
+
 
   dx_g = S[STATE_PX];
   dy_g = S[STATE_PY];
@@ -1039,9 +1042,10 @@ static void stateEstimatorUpdateWithFlow(flowMeasurement_t *flow, sensorData_t *
 
   // ~~~ X velocity prediction and update ~~~
   // predics the number of accumulated pixels in the x-direction
+  float omegaFactor = 1.25f;
   float hx[STATE_DIM] = {0};
   arm_matrix_instance_f32 Hx = {1, STATE_DIM, hx};
-  predictedNX = (flow->dt * Npix / thetapix ) * ((dx_g * R[2][2] / z_g) - omegay_b);
+  predictedNX = (flow->dt * Npix / thetapix ) * ((dx_g * R[2][2] / z_g) - omegaFactor * omegay_b);
   measuredNX = flow->dpixelx;
 
   // derive measurement equation with respect to dx (and z?)
@@ -1054,7 +1058,7 @@ static void stateEstimatorUpdateWithFlow(flowMeasurement_t *flow, sensorData_t *
   // ~~~ Y velocity prediction and update ~~~
   float hy[STATE_DIM] = {0};
   arm_matrix_instance_f32 Hy = {1, STATE_DIM, hy};
-  predictedNY = (flow->dt * Npix / thetapix ) * ((dy_g * R[2][2] / z_g) + omegax_b);
+  predictedNY = (flow->dt * Npix / thetapix ) * ((dy_g * R[2][2] / z_g) + omegaFactor * omegax_b);
   measuredNY = flow->dpixely;
 
   // derive measurement equation with respect to dy (and z?)
@@ -1073,6 +1077,11 @@ static void stateEstimatorUpdateWithTof(tofMeasurement_t *tof)
 
   // Only update the filter if the measurement is reliable (\hat{h} -> infty when R[2][2] -> 0)
   if (fabs(R[2][2]) > 0.1 && R[2][2] > 0){
+    float angle = fabsf(acosf(R[2][2])) - DEG_TO_RAD * (15.0f / 2.0f);
+    if (angle < 0.0f) {
+      angle = 0.0f;
+    }
+    //float predictedDistance = S[STATE_Z] / cosf(angle);
     float predictedDistance = S[STATE_Z] / R[2][2];
     float measuredDistance = tof->distance; // [m]
 
@@ -1080,6 +1089,7 @@ static void stateEstimatorUpdateWithTof(tofMeasurement_t *tof)
     //
     // h = z/((R*z_b)\dot z_b) = z/cos(alpha)
     h[STATE_Z] = 1 / R[2][2];
+    //h[STATE_Z] = 1 / cosf(angle);
 
     // Scalar update
     stateEstimatorScalarUpdate(&H, measuredDistance-predictedDistance, tof->stdDev);
@@ -1303,9 +1313,9 @@ void estimatorKalmanInit(void) {
   memset(P, 0, sizeof(S));
 
   // TODO: Can we initialize this more intelligently?
-  S[STATE_X] = 0.5;
-  S[STATE_Y] = 0.5;
-  S[STATE_Z] = 0;
+  S[STATE_X] = initialX;
+  S[STATE_Y] = initialY;
+  S[STATE_Z] = initialZ;
   S[STATE_PX] = 0;
   S[STATE_PY] = 0;
   S[STATE_PZ] = 0;
@@ -1415,6 +1425,12 @@ void estimatorKalmanSetShift(float deltax, float deltay)
   S[STATE_Y] -= deltay;
 }
 
+void estimatorKalmanGetEstimatedPos(point_t* pos) {
+  pos->x = S[STATE_X];
+  pos->y = S[STATE_Y];
+  pos->z = S[STATE_Z];
+}
+
 // Temporary development groups
 LOG_GROUP_START(kalman_states)
   LOG_ADD(LOG_FLOAT, ox, &S[STATE_X])
@@ -1471,4 +1487,7 @@ PARAM_GROUP_START(kalman)
   PARAM_ADD(PARAM_FLOAT, mNBaro, &measNoiseBaro)
   PARAM_ADD(PARAM_FLOAT, mNGyro_rollpitch, &measNoiseGyro_rollpitch)
   PARAM_ADD(PARAM_FLOAT, mNGyro_yaw, &measNoiseGyro_yaw)
+  PARAM_ADD(PARAM_FLOAT, initialX, &initialX)
+  PARAM_ADD(PARAM_FLOAT, initialY, &initialY)
+  PARAM_ADD(PARAM_FLOAT, initialZ, &initialZ)
 PARAM_GROUP_STOP(kalman)
