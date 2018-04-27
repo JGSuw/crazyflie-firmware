@@ -61,16 +61,8 @@
 #include "buzzer.h"
 #include "sound.h"
 #include "sysload.h"
-<<<<<<< HEAD
 #include "eag.h"
 
-#ifdef PLATFORM_CF1
-#include "uart_cf1.h"
-#endif
-
-#ifdef PLATFORM_CF2
-=======
->>>>>>> 802c74a4ebda8385325412b36bb3cb45d6c3b5cd
 #include "deck.h"
 #include "extrx.h"
 
