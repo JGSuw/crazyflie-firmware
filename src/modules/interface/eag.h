@@ -46,23 +46,5 @@ void eagInit(void);
  */
 bool eagTest(void);
 
-/**
- * Enable emergency stop, will shut-off energy to the motors.
- */
-void eagSetEmergencyStop();
-
-/**
- * Disable emergency stop, will enable energy to the motors.
- */
-void eagResetEmergencyStop();
-
-/**
- * Restart the countdown until emergercy stop will be enabled.
- *
- * @param timeout Timeout in eag loop tick. The eag loop rate is
- *                RATE_MAIN_LOOP.
- */
-void eagSetEmergencyStopTimeout(int timeout);
-
 
 #endif /* EAG_H_ */

@@ -122,7 +122,7 @@ static void eagTask(void* param)
     vTaskDelayUntil(&lastWakeTime, F2T(200));
   }
   // Initialize tick to something else then 0
-  tick = 1;
+  // tick = 1;
   while(1) {
     vTaskDelayUntil(&lastWakeTime, F2T(200));
 
@@ -141,60 +141,10 @@ static void eagTask(void* param)
     // eag_value += 1
     eag_value = analogRead(DECK_GPIO_RX2);
 
-    tick++;
+    // tick++;
   }
 }
 
 LOG_GROUP_START(eag)
 LOG_ADD(LOG_UINT16, eag, &eag_value)
 LOG_GROUP_STOP(eag)
-//
-// LOG_GROUP_START(acc)
-// LOG_ADD(LOG_FLOAT, x, &sensorData.acc.x)
-// LOG_ADD(LOG_FLOAT, y, &sensorData.acc.y)
-// LOG_ADD(LOG_FLOAT, z, &sensorData.acc.z)
-// LOG_GROUP_STOP(acc)
-//
-// #ifdef LOG_SEC_IMU
-// LOG_GROUP_START(accSec)
-// LOG_ADD(LOG_FLOAT, x, &sensorData.accSec.x)
-// LOG_ADD(LOG_FLOAT, y, &sensorData.accSec.y)
-// LOG_ADD(LOG_FLOAT, z, &sensorData.accSec.z)
-// LOG_GROUP_STOP(accSec)
-// #endif
-//
-// LOG_GROUP_START(baro)
-// LOG_ADD(LOG_FLOAT, asl, &sensorData.baro.asl)
-// LOG_ADD(LOG_FLOAT, temp, &sensorData.baro.temperature)
-// LOG_ADD(LOG_FLOAT, pressure, &sensorData.baro.pressure)
-// LOG_GROUP_STOP(baro)
-//
-// LOG_GROUP_START(gyro)
-// LOG_ADD(LOG_FLOAT, x, &sensorData.gyro.x)
-// LOG_ADD(LOG_FLOAT, y, &sensorData.gyro.y)
-// LOG_ADD(LOG_FLOAT, z, &sensorData.gyro.z)
-// LOG_GROUP_STOP(gyro)
-//
-// #ifdef LOG_SEC_IMU
-// LOG_GROUP_START(gyroSec)
-// LOG_ADD(LOG_FLOAT, x, &sensorData.gyroSec.x)
-// LOG_ADD(LOG_FLOAT, y, &sensorData.gyroSec.y)
-// LOG_ADD(LOG_FLOAT, z, &sensorData.gyroSec.z)
-// LOG_GROUP_STOP(gyroSec)
-// #endif
-//
-// LOG_GROUP_START(mag)
-// LOG_ADD(LOG_FLOAT, x, &sensorData.mag.x)
-// LOG_ADD(LOG_FLOAT, y, &sensorData.mag.y)
-// LOG_ADD(LOG_FLOAT, z, &sensorData.mag.z)
-// LOG_GROUP_STOP(mag)
-//
-// LOG_GROUP_START(controller)
-// LOG_ADD(LOG_INT16, ctr_yaw, &control.yaw)
-// LOG_GROUP_STOP(controller)
-//
-// LOG_GROUP_START(stateEstimate)
-// LOG_ADD(LOG_FLOAT, x, &state.position.x)
-// LOG_ADD(LOG_FLOAT, y, &state.position.y)
-// LOG_ADD(LOG_FLOAT, z, &state.position.z)
-// LOG_GROUP_STOP(stateEstimate)
